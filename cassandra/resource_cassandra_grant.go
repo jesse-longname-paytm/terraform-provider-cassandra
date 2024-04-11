@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	deleteGrantRawTemplate = `REVOKE {{ .Privilege }} ON {{.ResourceType}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} FROM "{{.Grantee}}"`
-	createGrantRawTemplate = `GRANT {{ .Privilege }} ON {{.ResourceType}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} TO "{{.Grantee}}"`
-	readGrantRawTemplate   = `LIST {{ .Privilege }} ON {{.ResourceType}} {{if .Keyspace }}"{{ .Keyspace }}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} OF "{{.Grantee}}"`
+	deleteGrantRawTemplate = `REVOKE {{ .Privilege }}{{if .RequiresOnQualifier }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} FROM "{{.Grantee}}"`
+	createGrantRawTemplate = `GRANT {{ .Privilege }}{{if .RequiresOnQualifier }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} TO "{{.Grantee}}"`
+	readGrantRawTemplate   = `LIST {{ .Privilege }}{{if .RequiresOnQualifier }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace }}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} OF "{{.Grantee}}"`
 
 	privilegeAll       = "all"
 	privilegeCreate    = "create"
@@ -43,6 +43,7 @@ const (
 	resourceMbean                  = "mbean"
 	resourceMbeans                 = "mbeans"
 	resourceAllMbeans              = "all mbeans"
+	resourceGrantRole              = "grant role"
 
 	identifierFunctionName = "function_name"
 	identifierTableName    = "table_name"
@@ -107,11 +108,12 @@ var (
 
 // Grant represents a Cassandra Grant
 type Grant struct {
-	Privilege    string
-	ResourceType string
-	Grantee      string
-	Keyspace     string
-	Identifier   string
+	Privilege           string
+	ResourceType        string
+	Grantee             string
+	Keyspace            string
+	Identifier          string
+	RequiresOnQualifier bool
 }
 
 func validIdentifier(i interface{}, path cty.Path, identifierName string, regularExpression *regexp.Regexp) diag.Diagnostics {
@@ -335,7 +337,13 @@ func parseData(d *schema.ResourceData) (*Grant, error) {
 		}
 	}
 
-	return &Grant{privilege, resourceType, grantee, keyspaceName, identifier}, nil
+	var requiresOnQualifier = true
+
+	if resourceType == resourceGrantRole {
+		requiresOnQualifier = false
+	}
+
+	return &Grant{privilege, resourceType, grantee, keyspaceName, identifier, requiresOnQualifier}, nil
 }
 
 func resourceGrantExists(d *schema.ResourceData, meta interface{}) (b bool, e error) {
