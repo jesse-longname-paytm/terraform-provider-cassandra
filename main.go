@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/bartoszj/terraform-provider-cassandra/cassandra"
+	"github.com/jesse-longname-paytm/terraform-provider-cassandra/cassandra"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
 )
 
