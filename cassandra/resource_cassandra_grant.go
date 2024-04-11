@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	deleteGrantRawTemplate = `REVOKE {{ .Privilege }}{{if .RequiresOnQualifier }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} FROM "{{.Grantee}}"`
-	createGrantRawTemplate = `GRANT {{ .Privilege }}{{if .RequiresOnQualifier }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} TO "{{.Grantee}}"`
-	readGrantRawTemplate   = `LIST {{ .Privilege }}{{if .RequiresOnQualifier }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace }}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} OF "{{.Grantee}}"`
+	deleteGrantRawTemplate = `REVOKE{{if .RequiresOnQualifier }} {{ .Privilege }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} FROM "{{.Grantee}}"`
+	createGrantRawTemplate = `GRANT{{if .RequiresOnQualifier }} {{ .Privilege }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace}}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if .Identifier}}"{{.Identifier}}"{{end}} TO "{{.Grantee}}"`
+	readGrantRawTemplate   = `LIST {{ .Privilege }}{{if .RequiresOnQualifier }} ON {{.ResourceType}}{{end}} {{if .Keyspace }}"{{ .Keyspace }}"{{end}}{{if and .Keyspace .Identifier}}.{{end}}{{if and .Identifier .RequiresReadIdentifier}}"{{.Identifier}}"{{end}} OF "{{.Grantee}}"`
 
 	privilegeAll       = "all"
 	privilegeCreate    = "create"
@@ -69,7 +69,7 @@ var (
 	allResources = []string{resourceAllFunctions, resourceAllFunctionsInKeyspace, resourceFunction, resourceAllKeyspaces, resourceKeyspace, resourceTable, resourceAllRoles, resourceRole, resourceRoles, resourceMbean, resourceMbeans, resourceAllMbeans, resourceGrantRole}
 
 	privilegeToResourceTypesMap = map[string][]string{
-		privilegeAll:       {resourceAllFunctions, resourceAllFunctionsInKeyspace, resourceFunction, resourceAllKeyspaces, resourceKeyspace, resourceTable, resourceAllRoles, resourceRole},
+		privilegeAll:       {resourceAllFunctions, resourceAllFunctionsInKeyspace, resourceFunction, resourceAllKeyspaces, resourceKeyspace, resourceTable, resourceAllRoles, resourceRole, resourceGrantRole},
 		privilegeCreate:    {resourceAllKeyspaces, resourceKeyspace, resourceAllFunctions, resourceAllFunctionsInKeyspace, resourceAllRoles},
 		privilegeAlter:     {resourceAllKeyspaces, resourceKeyspace, resourceTable, resourceAllFunctions, resourceAllFunctionsInKeyspace, resourceFunction, resourceAllRoles, resourceRole},
 		privilegeDrop:      {resourceKeyspace, resourceTable, resourceAllFunctions, resourceAllFunctionsInKeyspace, resourceFunction, resourceAllRoles, resourceRole},
@@ -93,16 +93,18 @@ var (
 		resourceMbean:                  true,
 		resourceMbeans:                 true,
 		resourceAllMbeans:              true,
+		resourceGrantRole:							true,
 	}
 
 	resourcesThatRequireKeyspaceQualifier = []string{resourceAllFunctionsInKeyspace, resourceFunction, resourceKeyspace, resourceTable}
 
 	resourceTypeToIdentifier = map[string]string{
-		resourceFunction: identifierFunctionName,
-		resourceMbean:    identifierMbeanName,
-		resourceMbeans:   identifierMbeanPattern,
-		resourceTable:    identifierTableName,
-		resourceRole:     identifierRoleName,
+		resourceFunction:  identifierFunctionName,
+		resourceMbean:     identifierMbeanName,
+		resourceMbeans:    identifierMbeanPattern,
+		resourceTable:     identifierTableName,
+		resourceRole:      identifierRoleName,
+		resourceGrantRole: identifierRoleName,
 	}
 )
 
@@ -114,6 +116,7 @@ type Grant struct {
 	Keyspace            string
 	Identifier          string
 	RequiresOnQualifier bool
+	RequiresReadIdentifier bool
 }
 
 func validIdentifier(i interface{}, path cty.Path, identifierName string, regularExpression *regexp.Regexp) diag.Diagnostics {
@@ -184,7 +187,7 @@ func resourceCassandraGrant() *schema.Resource {
 							{
 								Severity:      diag.Error,
 								Summary:       "Not valid resource type",
-								Detail:        fmt.Sprintf("%s in not a valid resourceType, must be one of %s", resourceType, strings.Join(allResources, ", ")),
+								Detail:        fmt.Sprintf("%s is not a valid resourceType, must be one of %s", resourceType, strings.Join(allResources, ", ")),
 								AttributePath: path,
 							},
 						}
@@ -338,12 +341,14 @@ func parseData(d *schema.ResourceData) (*Grant, error) {
 	}
 
 	var requiresOnQualifier = true
+	var requiresReadIdentifier = true
 
 	if resourceType == resourceGrantRole {
 		requiresOnQualifier = false
+		requiresReadIdentifier = false
 	}
 
-	return &Grant{privilege, resourceType, grantee, keyspaceName, identifier, requiresOnQualifier}, nil
+	return &Grant{privilege, resourceType, grantee, keyspaceName, identifier, requiresOnQualifier, requiresReadIdentifier}, nil
 }
 
 func resourceGrantExists(d *schema.ResourceData, meta interface{}) (b bool, e error) {
